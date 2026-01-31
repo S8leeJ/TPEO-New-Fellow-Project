@@ -11,8 +11,20 @@ export async function GET(request: Request) {
 
     if (code) {
         const supabase = await createClient()
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (!error) {
+        const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (!exchangeError) {
+            // ensure a profile row exists for provider / OAuth sign-ins
+            const sessionUser = exchangeData?.session?.user
+            if (sessionUser) {
+                await supabase.from('users').upsert({
+                    id: sessionUser.id,
+                    email: sessionUser.email,
+                })
+            }
+            const { error } = exchangeError
+            if (error) {
+                // fall through to error redirect below
+            } else {
             const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
             const isLocalEnv = process.env.NODE_ENV === 'development'
             if (isLocalEnv) {
