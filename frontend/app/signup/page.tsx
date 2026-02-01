@@ -21,6 +21,24 @@ export default async function SignupPage(props: {
                     </p>
                 )}
                 <form className="animate-in flex-1 flex flex-col w-full justify-center gap-2 text-foreground">
+                    <label className="text-md" htmlFor="first_name">
+                        First Name
+                    </label>
+                    <input
+                        className="rounded-md px-4 py-2 bg-inherit border mb-6"
+                        name="first_name"
+                        placeholder="John"
+                        required
+                    />
+                    <label className="text-md" htmlFor="last_name">
+                        Last Name
+                    </label>
+                    <input
+                        className="rounded-md px-4 py-2 bg-inherit border mb-6"
+                        name="last_name"
+                        placeholder="Doe"
+                        required
+                    />
                     <label className="text-md" htmlFor="email">
                         Email
                     </label>

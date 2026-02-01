@@ -1,15 +1,15 @@
 
 import Link from 'next/link'
-import { signup } from '../login/actions'
+import { login } from './actions'
 
-export default async function SignupPage(props: {
+export default async function LoginPage(props: {
     searchParams: Promise<{ message: string; error: string }>
 }) {
     const searchParams = await props.searchParams
     return (
         <div className="flex min-h-screen flex-col items-center justify-center py-2">
             <div className="flex flex-col w-full px-8 sm:max-w-md justify-center gap-2">
-                <h1 className="text-2xl font-bold">Sign Up</h1>
+                <h1 className="text-2xl font-bold">Login</h1>
                 {searchParams?.message && (
                     <p className="mt-4 p-4 bg-foreground/10 text-foreground text-center">
                         {searchParams.message}
@@ -21,24 +21,6 @@ export default async function SignupPage(props: {
                     </p>
                 )}
                 <form className="animate-in flex-1 flex flex-col w-full justify-center gap-2 text-foreground">
-                    <label className="text-md" htmlFor="first_name">
-                        First Name
-                    </label>
-                    <input
-                        className="rounded-md px-4 py-2 bg-inherit border mb-6"
-                        name="first_name"
-                        placeholder="John"
-                        required
-                    />
-                    <label className="text-md" htmlFor="last_name">
-                        Last Name
-                    </label>
-                    <input
-                        className="rounded-md px-4 py-2 bg-inherit border mb-6"
-                        name="last_name"
-                        placeholder="Doe"
-                        required
-                    />
                     <label className="text-md" htmlFor="email">
                         Email
                     </label>
@@ -59,15 +41,15 @@ export default async function SignupPage(props: {
                         required
                     />
                     <button
-                        formAction={signup}
+                        formAction={login}
                         className="bg-green-700 rounded-md px-4 py-2 text-foreground mb-2 text-white"
                     >
-                        Sign Up
+                        Sign In
                     </button>
                     <p className="text-sm text-center mt-2">
-                        Already have an account?{' '}
-                        <Link href="/login" className="underline">
-                            Login
+                        Don&apos;t have an account?{' '}
+                        <Link href="/signup" className="underline">
+                            Sign Up
                         </Link>
                     </p>
                 </form>
