@@ -22,6 +22,7 @@ export async function addToFavorites(apartmentId: string) {
         .insert({
             user_id: user.id,
             apartment_id: apartmentId,
+            unit_id: null,
         })
 
     if (error) {
@@ -50,6 +51,7 @@ export async function removeFromFavorites(apartmentId: string) {
         .delete()
         .eq('user_id', user.id)
         .eq('apartment_id', apartmentId)
+        .is('unit_id', null)
 
     if (error) {
         console.error('Error removing favorite:', error)

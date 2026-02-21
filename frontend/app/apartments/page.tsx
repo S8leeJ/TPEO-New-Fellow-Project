@@ -20,11 +20,12 @@ export default async function ApartmentsPage() {
         return <div className="p-4 text-red-500">Error loading apartments</div>
     }
 
-    // Fetch user's favorites
+    // Fetch user's apartment-level favorites (unit_id is null = starred building, not a specific unit)
     const { data: favorites, error: favoritesError } = await supabase
         .from('favorites')
         .select('apartment_id')
         .eq('user_id', user.id)
+        .is('unit_id', null)
 
     if (favoritesError) {
         console.error('Error fetching favorites:', favoritesError)
