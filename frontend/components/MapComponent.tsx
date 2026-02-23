@@ -3,7 +3,6 @@
 import { useRef, useEffect, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-// @ts-expect-error - osmtogeojson has no types
 import osmtogeojson from "osmtogeojson";
 import centroid from "@turf/centroid";
 
