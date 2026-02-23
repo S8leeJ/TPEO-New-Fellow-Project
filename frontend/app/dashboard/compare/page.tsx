@@ -50,6 +50,7 @@ export default function ComparePage() {
   }, []);
 
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch requires loading state */
     setLoading(true);
     fetchCompareItems().finally(() => setLoading(false));
   }, [fetchCompareItems]);

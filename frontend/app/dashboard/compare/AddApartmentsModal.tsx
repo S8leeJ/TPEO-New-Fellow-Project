@@ -28,6 +28,7 @@ export default function AddApartmentsModal({
 
   useEffect(() => {
     if (isOpen) {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-open requires immediate loading state */
       setLoading(true)
       setError(null)
       setSelectedIds(new Set())

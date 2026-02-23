@@ -43,7 +43,6 @@ export default function MapComponent() {
       maxZoom: 18,
       pitch: 45,
       bearing: 0,
-      antialias: true,
     });
 
     map.current.addControl(
@@ -331,7 +330,7 @@ export default function MapComponent() {
     });
 
     map.current.on("click", "3d-buildings", (e) => {
-      if (!map.current || e.features.length === 0) return;
+      if (!map.current || !e.features || e.features.length === 0) return;
       const feature = e.features[0];
       const props = feature.properties as Record<string, unknown>;
       const centerPoint = centroid(feature as GeoJSON.Feature);

@@ -29,6 +29,7 @@ export default function SelectUnitsModal({
   const [error, setError] = useState<string | null>(null)
   const [addingId, setAddingId] = useState<string | null>(null)
 
+  const apartmentIdsKey = apartmentIds.join(',')
   useEffect(() => {
     if (isOpen && apartmentIds.length > 0) {
       setLoading(true)
@@ -40,7 +41,8 @@ export default function SelectUnitsModal({
     } else {
       setUnits([])
     }
-  }, [isOpen, apartmentIds.join(',')])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- apartmentIdsKey is stable string of apartmentIds
+  }, [isOpen, apartmentIdsKey])
 
   const handleAddUnit = async (unit: UnitWithApartment) => {
     const key = unitKey(unit.apartment_id, unit.id)
