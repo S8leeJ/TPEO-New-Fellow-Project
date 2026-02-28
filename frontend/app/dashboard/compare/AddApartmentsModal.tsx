@@ -1,12 +1,9 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { getApartments } from './actions'
-
-interface Apartment {
-  id: string
-  name: string
-}
+import type { ApartmentForCompare } from './actions'
 
 interface AddApartmentsModalProps {
   isOpen: boolean
@@ -21,7 +18,7 @@ export default function AddApartmentsModal({
   existingFavoriteIds,
   onSelectApartments,
 }: AddApartmentsModalProps) {
-  const [apartments, setApartments] = useState<Apartment[]>([])
+  const [apartments, setApartments] = useState<ApartmentForCompare[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,12 +75,12 @@ export default function AddApartmentsModal({
       aria-labelledby="add-apartments-title"
     >
       <div
-        className="w-full max-w-md rounded-lg border border-zinc-200 bg-white shadow-xl"
+        className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-lg border border-zinc-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3">
           <h2 id="add-apartments-title" className="text-lg font-semibold text-zinc-900">
-            Add apartments to compare
+            Choose Apartment Building
           </h2>
           <button
             type="button"
@@ -97,49 +94,73 @@ export default function AddApartmentsModal({
           </button>
         </div>
 
-        <div className="max-h-80 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="flex justify-center py-8 text-zinc-500">Loading apartments…</div>
+            <div className="flex justify-center py-12 text-zinc-500">Loading apartments…</div>
           ) : error ? (
-            <div className="py-4 text-center text-sm text-red-600">{error}</div>
+            <div className="py-8 text-center text-sm text-red-600">{error}</div>
           ) : apartments.length === 0 ? (
-            <div className="py-8 text-center text-sm text-zinc-500">No apartments found.</div>
+            <div className="py-12 text-center text-sm text-zinc-500">No apartments found.</div>
           ) : (
-            <ul className="space-y-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {apartments.map((apt) => {
                 const isAlreadyFavorite = existingFavoriteIds.has(apt.id)
                 const isSelected = selectedIds.has(apt.id)
                 return (
-                  <li key={apt.id}>
-                    <label
-                      className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
-                        isAlreadyFavorite
-                          ? 'cursor-not-allowed bg-zinc-50 text-zinc-400'
-                          : isSelected
-                            ? 'bg-zinc-100'
-                            : 'hover:bg-zinc-50'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected || isAlreadyFavorite}
-                        disabled={isAlreadyFavorite}
-                        onChange={() => toggleSelection(apt.id)}
-                        className="h-4 w-4 rounded border-zinc-300 text-zinc-800 focus:ring-zinc-500"
-                      />
-                      <span className="text-sm font-medium text-zinc-800">{apt.name}</span>
-                      {isAlreadyFavorite && (
-                        <span className="ml-auto text-xs text-zinc-400">Already added</span>
+                  <label
+                    key={apt.id}
+                    className={`relative flex flex-col overflow-hidden rounded-lg border-2 transition-colors ${
+                      isAlreadyFavorite
+                        ? 'cursor-not-allowed border-zinc-200 bg-zinc-50 opacity-60'
+                        : isSelected
+                          ? 'cursor-pointer border-zinc-800 bg-zinc-50'
+                          : 'cursor-pointer border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected || isAlreadyFavorite}
+                      disabled={isAlreadyFavorite}
+                      onChange={() => toggleSelection(apt.id)}
+                      className="sr-only"
+                    />
+                    <div className="aspect-[4/3] w-full shrink-0 overflow-hidden bg-zinc-200">
+                      {apt.image_url ? (
+                        <Image
+                          src={apt.image_url}
+                          alt={apt.name}
+                          width={280}
+                          height={210}
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-zinc-200" aria-hidden />
                       )}
-                    </label>
-                  </li>
+                    </div>
+                    <div className="flex flex-col gap-1 p-3">
+                      <p className="font-semibold text-zinc-900">{apt.name}</p>
+                      <p className="text-sm text-zinc-600">$$$ - $$$</p>
+                      {apt.address && (
+                        <p className="flex items-center gap-1 text-xs text-zinc-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 00.281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 103 9c0 3.492 1.698 5.988 3.355 7.584a13.731 13.731 0 002.273 1.765 11.842 11.842 0 00.976.544l.062.029.018.008.006.003zM10 11.25a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5z" clipRule="evenodd" />
+                          </svg>
+                          {apt.address}
+                        </p>
+                      )}
+                      {isAlreadyFavorite && (
+                        <p className="text-xs text-zinc-400">Already added</p>
+                      )}
+                    </div>
+                  </label>
                 )
               })}
-            </ul>
+            </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-zinc-200 px-4 py-3">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-200 px-4 py-3">
           <button
             type="button"
             onClick={onClose}

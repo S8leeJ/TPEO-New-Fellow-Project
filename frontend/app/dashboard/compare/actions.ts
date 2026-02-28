@@ -4,7 +4,14 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
-export async function getApartments(): Promise<{ id: string; name: string }[]> {
+export type ApartmentForCompare = {
+  id: string
+  name: string
+  image_url: string | null
+  address?: string | null
+}
+
+export async function getApartments(): Promise<ApartmentForCompare[]> {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -15,7 +22,7 @@ export async function getApartments(): Promise<{ id: string; name: string }[]> {
 
   const { data, error } = await supabase
     .from('apartments')
-    .select('id, name')
+    .select('id, name, image_url')
     .order('name')
 
   if (error) {
@@ -23,18 +30,24 @@ export async function getApartments(): Promise<{ id: string; name: string }[]> {
     return []
   }
 
-  return data ?? []
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    image_url: r.image_url ?? null,
+  }))
 }
 
 export type UnitWithApartment = {
   id: string
   apartment_id: string
   room_type: string
+  layout_name: string | null
   bedrooms: number | null
   bathrooms: number | null
   sq_ft: number | null
   floor: number | null
   windows: string | null
+  image_url: string | null
   apartment: { id: string; name: string }
 }
 
@@ -53,7 +66,7 @@ export async function getUnitsByApartmentIds(
 
   const { data: units, error: unitsError } = await supabase
     .from('units')
-    .select('id, apartment_id, room_type, bedrooms, bathrooms, sq_ft, floor, windows')
+    .select('id, apartment_id, room_type, layout_name, bedrooms, bathrooms, sq_ft, floor, windows, image_url')
     .in('apartment_id', apartmentIds)
     .order('apartment_id')
     .order('room_type')
@@ -91,11 +104,14 @@ export type CompareItemWithDetails = {
   unit: {
     id: string
     room_type: string
+    layout_name: string | null
     bedrooms: number | null
     bathrooms: number | null
     sq_ft: number | null
     floor: number | null
     windows: string | null
+    image_url: string | null
+    monthly_rent: number | null
   }
 }
 
@@ -124,26 +140,49 @@ export async function getCompareItems(): Promise<CompareItemWithDetails[]> {
   const unitIds = items.map((i) => i.unit_id).filter(Boolean) as string[]
   const aptIds = [...new Set(items.map((i) => i.apartment_id))]
 
-  const [{ data: units }, { data: apartments }] = await Promise.all([
-    supabase.from('units').select('id, apartment_id, room_type, bedrooms, bathrooms, sq_ft, floor, windows').in('id', unitIds),
+  const [
+    { data: units },
+    { data: apartments },
+    { data: prices, error: pricesError },
+  ] = await Promise.all([
+    supabase.from('units').select('id, apartment_id, room_type, layout_name, bedrooms, bathrooms, sq_ft, floor, windows, image_url').in('id', unitIds),
     supabase.from('apartments').select('id, name').in('id', aptIds),
+    supabase.from('prices').select('unit_id, monthly_rent').in('unit_id', unitIds),
   ])
+
+  if (pricesError) {
+    console.error('Error fetching prices:', pricesError)
+  }
 
   const unitMap = new Map((units ?? []).map((u) => [u.id, u]))
   const aptMap = new Map((apartments ?? []).map((a) => [a.id, a]))
+  // Build price map: prefer prices.monthly_rent, fallback to units.price
+  const priceMap = new Map<string, number>()
+  for (const p of prices ?? []) {
+    const rent = (p as { monthly_rent?: number }).monthly_rent
+    if (p.unit_id && rent != null && !priceMap.has(p.unit_id)) {
+      priceMap.set(p.unit_id, Number(rent))
+    }
+  }
 
   return items
     .filter((i) => i.unit_id && unitMap.has(i.unit_id) && aptMap.has(i.apartment_id))
-    .map((i) => ({
-      id: i.id,
-      apartment_id: i.apartment_id,
-      unit_id: i.unit_id!,
-      apartment: aptMap.get(i.apartment_id)!,
-      unit: unitMap.get(i.unit_id!)!,
-    }))
+    .map((i) => {
+      const unit = unitMap.get(i.unit_id!)!
+      return {
+        id: i.id,
+        apartment_id: i.apartment_id,
+        unit_id: i.unit_id!,
+        apartment: aptMap.get(i.apartment_id)!,
+        unit: { ...unit, monthly_rent: priceMap.get(i.unit_id!) ?? null },
+      }
+    })
 }
 
-export async function addToCompare(apartmentId: string, unitId: string) {
+export async function addToCompare(
+  apartmentId: string,
+  unitId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -160,11 +199,15 @@ export async function addToCompare(apartmentId: string, unitId: string) {
 
   if (error) {
     console.error('Error adding to compare:', error)
-    throw error
+    return {
+      ok: false,
+      error: error.message ?? 'Failed to add unit. Ensure the unit_id migration is applied to favorites.',
+    }
   }
 
   revalidatePath('/dashboard/compare')
   revalidatePath('/apartments')
+  return { ok: true }
 }
 
 export async function removeFromCompare(favoriteId: string) {

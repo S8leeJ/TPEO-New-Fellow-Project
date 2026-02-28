@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import {
   addToCompare,
@@ -10,22 +11,65 @@ import {
 import AddApartmentsModal from "./AddApartmentsModal";
 import SelectUnitsModal from "./SelectUnitsModal";
 
+const ACTIVE_FEATURES = ["Price", "Bedrooms", "Bathrooms", "Floor Area (sqft)", "Floor", "Windows", "Amenities"];
+
 const FILTER_TAGS = [
-  { id: "location", label: "Location", active: false },
-  { id: "floor-area", label: "Floor Area", active: true },
-  { id: "bathrooms", label: "Bathrooms", active: true },
-  { id: "amenities", label: "Amenities", active: true },
-  { id: "num-people", label: "Number of People", active: false },
+  { id: "price", label: "Price", active: true },
   { id: "bedrooms", label: "Bedrooms", active: true },
-  { id: "dining", label: "Dining", active: true },
+  { id: "bathrooms", label: "Bathrooms", active: true },
+  { id: "floor-area-sqft", label: "Floor Area", active: true },
+  { id: "amenities", label: "Amenities", active: true },
+  { id: "location", label: "Location", active: false },
+  { id: "num-people", label: "Number of People", active: false },
+  { id: "floor", label: "Floor", active: true },
+  { id: "windows", label: "Windows", active: true },
+  { id: "dining", label: "Dining", active: false },
   { id: "popular", label: "Popular reviews", active: false },
   { id: "controversial", label: "Controversial reviews", active: false },
 ];
 
-const ACTIVE_FEATURES = ["Bedrooms", "Bathrooms", "Floor Area (sqft)", "Floor", "Windows"];
+const FEATURE_TO_TAG_ID: Record<string, string> = {
+  "Price": "price",
+  "Bedrooms": "bedrooms",
+  "Bathrooms": "bathrooms",
+  "Floor Area (sqft)": "floor-area-sqft",
+  "Floor": "floor",
+  "Windows": "windows",
+  "Amenities": "amenities",
+};
 
 function compareKey(apartmentId: string, unitId: string) {
   return `${apartmentId}:${unitId}`;
+}
+
+function formatPrice(centsOrDollars: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(centsOrDollars);
+}
+
+function getFeatureValue(item: CompareItemWithDetails, feature: string): string {
+  switch (feature) {
+    case "Price":
+      return item.unit.monthly_rent != null ? formatPrice(item.unit.monthly_rent) : "—";
+    case "Bedrooms":
+      return item.unit.bedrooms != null ? String(item.unit.bedrooms) : "—";
+    case "Bathrooms":
+      return item.unit.bathrooms != null ? String(item.unit.bathrooms) : "—";
+    case "Floor Area (sqft)":
+      return item.unit.sq_ft != null ? `${item.unit.sq_ft} sq ft` : "—";
+    case "Floor":
+      return item.unit.floor != null ? String(item.unit.floor) : "—";
+    case "Windows":
+      return item.unit.windows != null ? item.unit.windows : "—";
+    case "Amenities":
+      return "—";
+    default:
+      return "—";
+  }
 }
 
 export default function ComparePage() {
@@ -68,7 +112,10 @@ export default function ComparePage() {
   };
 
   const handleAddUnit = async (apartmentId: string, unitId: string) => {
-    await addToCompare(apartmentId, unitId);
+    const result = await addToCompare(apartmentId, unitId);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
     await fetchCompareItems();
   };
 
@@ -81,8 +128,12 @@ export default function ComparePage() {
     compareItems.map((c) => compareKey(c.apartment_id, c.unit_id))
   );
 
+  const visibleFeatures = ACTIVE_FEATURES.filter(
+    (feature) => activeTags[FEATURE_TO_TAG_ID[feature]] !== false
+  );
+
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem-3rem)] flex-1 flex-col">
+    <div className="-m-6 flex min-h-[calc(100vh-3.5rem-3rem)] flex-1 flex-col bg-white p-6">
       <AddApartmentsModal
         isOpen={apartmentsModalOpen}
         onClose={() => setApartmentsModalOpen(false)}
@@ -98,117 +149,118 @@ export default function ComparePage() {
         onAddUnit={handleAddUnit}
       />
 
-      <div className="shrink-0 space-y-4 text-center">
-        <h1 className="text-2xl font-bold text-zinc-900">Compare</h1>
+      <h1 className="mb-4 text-2xl font-bold text-zinc-900">Compare</h1>
 
-        <div className="flex flex-wrap justify-center gap-2">
-          {FILTER_TAGS.map((tag) => (
-            <button
-              key={tag.id}
-              onClick={() => toggleTag(tag.id)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                activeTags[tag.id]
-                  ? "bg-zinc-800 text-white hover:bg-zinc-700"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-              }`}
-            >
-              {tag.label}
-            </button>
-          ))}
-        </div>
+      <div className="mb-6 flex flex-wrap gap-2">
+        {FILTER_TAGS.map((tag) => (
+          <button
+            key={tag.id}
+            onClick={() => toggleTag(tag.id)}
+            className={`rounded-lg border px-4 py-1 text-sm font-medium transition-colors ${
+              activeTags[tag.id]
+                ? "border-zinc-800 bg-zinc-800 text-white hover:bg-zinc-700"
+                : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+            }`}
+          >
+            {tag.label}
+          </button>
+        ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="flex justify-start py-4">
-          <div className="inline-flex min-w-max gap-6">
-            <div className="flex w-32 shrink-0 flex-col">
-              <div className="mb-4 flex h-[180px] items-start">
-                <button
-                  type="button"
-                  onClick={() => setApartmentsModalOpen(true)}
-                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-zinc-300 bg-zinc-50 text-2xl text-zinc-400 transition-colors hover:border-zinc-400 hover:bg-zinc-100"
-                  aria-label="Add apartments to compare"
+      <div className="mb-0 flex gap-4 overflow-x-auto pb-2">
+        <button
+          type="button"
+          onClick={() => setApartmentsModalOpen(true)}
+          className="flex h-[280px] w-48 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 text-4xl text-zinc-400 transition-colors hover:border-zinc-400 hover:bg-zinc-100"
+          aria-label="Add apartments to compare"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-zinc-400">
+            +
+          </span>
+        </button>
+
+        {loading ? (
+          <div className="flex h-[280px] w-48 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm text-zinc-500">
+            Loading…
+          </div>
+        ) : compareItems.length === 0 ? (
+          <div className="flex h-[280px] w-48 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50 text-sm text-zinc-500">
+            Click + to add units
+          </div>
+        ) : (
+          compareItems.map((item) => (
+            <div
+              key={item.id}
+              className="relative flex h-[280px] w-48 shrink-0 flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
+            >
+              <button
+                type="button"
+                onClick={() => handleRemoveFromCompare(item.id)}
+                className="absolute right-2 top-2 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                aria-label={`Remove ${item.apartment.name} ${item.unit.layout_name ?? item.unit.room_type} from compare`}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
                 >
-                  +
-                </button>
+                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                </svg>
+              </button>
+              <p className="mb-1 text-sm font-bold text-zinc-900">{item.apartment.name}</p>
+              <p className="mb-2 text-sm text-zinc-600">{item.unit.layout_name ?? item.unit.room_type}</p>
+              <div className="relative mb-3 aspect-[4/3] w-full overflow-hidden rounded-lg bg-zinc-200">
+                {item.unit.image_url ? (
+                  <Image
+                    src={item.unit.image_url}
+                    alt={item.unit.layout_name ?? item.unit.room_type ?? "Unit"}
+                    fill
+                    className="object-cover"
+                    sizes="192px"
+                    unoptimized
+                  />
+                ) : null}
               </div>
-              {ACTIVE_FEATURES.map((feature) => (
+              <p className="text-center text-sm font-medium text-zinc-600">
+                {item.unit.monthly_rent != null ? formatPrice(item.unit.monthly_rent) : "—"}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+
+      {compareItems.length > 0 && visibleFeatures.length > 0 && (
+        <div className="min-w-0 flex-1 overflow-auto bg-white px-4 pb-4 pt-0">
+          <div className="flex gap-4">
+            <div className="flex w-48 shrink-0 flex-col border-r border-zinc-200 pr-4">
+              {visibleFeatures.map((feature) => (
                 <div
                   key={feature}
-                  className="flex h-14 items-center border-b border-zinc-200 text-sm font-medium text-zinc-700"
+                  className="flex h-10 shrink-0 items-center justify-center border-b border-zinc-200 py-3 last:border-b-0 text-sm font-bold text-zinc-700"
                 >
                   {feature}
                 </div>
               ))}
             </div>
-
-            {loading ? (
-              <div className="flex w-52 items-center justify-center text-sm text-zinc-500">
-                Loading…
-              </div>
-            ) : compareItems.length === 0 ? (
-              <div className="flex w-52 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50 py-12 text-sm text-zinc-500">
-                Click + to add units to compare
-              </div>
-            ) : (
-              compareItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="relative w-52 shrink-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveFromCompare(item.id)}
-                    className="absolute right-2 top-2 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
-                    aria-label={`Remove ${item.apartment.name} ${item.unit.room_type} from compare`}
+            {compareItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex w-48 shrink-0 flex-col border-r border-zinc-200 pr-4 last:border-r-0"
+              >
+                {visibleFeatures.map((feature) => (
+                  <div
+                    key={feature}
+                    className="flex h-10 shrink-0 items-center justify-center border-b border-zinc-200 py-3 last:border-b-0 text-sm text-zinc-600"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                    </svg>
-                  </button>
-                  <div className="mb-2 pr-6">
-                    <p className="text-sm font-medium text-zinc-900">
-                      {item.apartment.name}
-                    </p>
-                    <p className="text-sm text-zinc-600">{item.unit.room_type}</p>
-                    {(item.unit.bedrooms != null || item.unit.bathrooms != null) && (
-                      <p className="text-xs text-zinc-500">
-                        {[item.unit.bedrooms != null && `${item.unit.bedrooms} bed`, item.unit.bathrooms != null && `${item.unit.bathrooms} bath`]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </p>
-                    )}
+                    {getFeatureValue(item, feature)}
                   </div>
-                  <div className="mb-2 aspect-[4/3] w-full rounded-lg bg-zinc-200" />
-                  {ACTIVE_FEATURES.map((feature) => (
-                    <div
-                      key={feature}
-                      className="flex h-14 items-center border-b border-zinc-100 text-sm text-zinc-500"
-                    >
-                      {feature === "Bedrooms" && item.unit.bedrooms != null
-                        ? item.unit.bedrooms
-                        : feature === "Bathrooms" && item.unit.bathrooms != null
-                          ? item.unit.bathrooms
-                          : feature === "Floor Area (sqft)" && item.unit.sq_ft != null
-                            ? `${item.unit.sq_ft} sqft`
-                            : feature === "Floor" && item.unit.floor != null
-                              ? item.unit.floor
-                              : feature === "Windows" && item.unit.windows != null
-                                ? item.unit.windows
-                                : "—"}
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
+                ))}
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

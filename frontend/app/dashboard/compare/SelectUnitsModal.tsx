@@ -52,8 +52,8 @@ export default function SelectUnitsModal({
     setError(null)
     try {
       await onAddUnit(unit.apartment_id, unit.id)
-    } catch {
-      setError('Failed to add unit')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add unit')
     } finally {
       setAddingId(null)
     }
@@ -66,7 +66,7 @@ export default function SelectUnitsModal({
     if (unit.sq_ft != null) parts.push(`${unit.sq_ft} sqft`)
     if (unit.floor != null) parts.push(`Floor ${unit.floor}`)
     if (unit.windows != null) parts.push(unit.windows)
-    return parts.length > 0 ? parts.join(' · ') : unit.room_type
+    return parts.length > 0 ? parts.join(' · ') : (unit.layout_name ?? unit.room_type)
   }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -148,7 +148,7 @@ export default function SelectUnitsModal({
                               }`}
                             >
                               <span className="text-sm font-medium text-zinc-900">
-                                {unit.room_type}
+                                {unit.layout_name ?? unit.room_type}
                               </span>
                               <span className="text-xs text-zinc-500">
                                 {formatUnitInfo(unit)}
