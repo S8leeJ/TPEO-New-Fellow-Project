@@ -10,6 +10,7 @@ export default function AddUnitPage() {
   const [sqFt, setSqFt] = useState('')
   const [floor, setFloor] = useState('')
   const [windows, setWindows] = useState('')
+  const [price, setPrice] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,6 +149,25 @@ export default function AddUnitPage() {
                 value={windows}
                 onChange={(e) => setWindows(e.target.value)}
                 placeholder="e.g. East, South"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="price"
+                className="mb-1 block text-sm text-zinc-600"
+              >
+                Price (monthly rent)
+              </label>
+              <input
+                id="price"
+                type="number"
+                min={0}
+                step={1}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="e.g. 1500"
                 className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               />
             </div>
