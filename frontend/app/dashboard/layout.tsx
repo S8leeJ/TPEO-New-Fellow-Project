@@ -19,10 +19,16 @@ export default function DashboardLayout({
             </Link>
             <div className="flex gap-4">
               <Link
-                href="/dashboard/compare"
+                href="/dashboard/apartments"
                 className="text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900"
               >
                 Apartments
+              </Link>
+              <Link
+                href="/dashboard/compare"
+                className="text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900"
+              >
+                Compare
               </Link>
               <Link
                 href="/dashboard/map"

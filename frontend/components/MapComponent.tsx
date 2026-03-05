@@ -16,10 +16,32 @@ type LngLatBounds =
   | { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number }
   | [number, number, number, number];
 
-export default function MapComponent() {
+export type MapApartment = {
+  id: string;
+  name: string;
+  image_url: string | null;
+};
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export default function MapComponent({
+  apartments = [],
+}: {
+  apartments?: MapApartment[];
+}) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const apartmentsRef = useRef<MapApartment[]>(apartments);
   const [loading, setLoading] = useState(false);
+
+  apartmentsRef.current = apartments;
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -41,7 +63,7 @@ export default function MapComponent() {
       zoom: 16,
       minZoom: 14,
       maxZoom: 18,
-      pitch: 45,
+      pitch: 0,
       bearing: 0,
     });
 
@@ -296,17 +318,44 @@ export default function MapComponent() {
       }
     };
 
-    const createPopupContent = (props: Record<string, unknown>) => {
-      let content = `<div style="padding: 5px; color: #333; font-family: sans-serif;">`;
-      content += `<h3 style="margin: 0 0 5px;">${props.name || "Building"}</h3>`;
-      if (props["addr:street"]) {
-        content += `<p style="margin: 0;">${props["addr:housenumber"] || ""} ${props["addr:street"]}</p>`;
+    const createPopupContent = (
+      props: Record<string, unknown>,
+      apartment: MapApartment | null
+    ) => {
+      const name = escapeHtml(String(props.name || "Building"));
+      const addrStreet = props["addr:street"]
+        ? escapeHtml(
+            `${(props["addr:housenumber"] || "")} ${props["addr:street"]}`
+          )
+        : "";
+      let content = `<div style="padding: 0; color: #333; font-family: system-ui, sans-serif; max-width: 280px;">`;
+      if (apartment?.image_url) {
+        content += `<img src="${escapeHtml(apartment.image_url)}" alt="${escapeHtml(apartment.name)}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px 8px 0 0; display: block;" />`;
+      }
+      content += `<div style="padding: 10px 12px;">`;
+      content += `<h3 style="margin: 0 0 6px; font-size: 1rem; font-weight: 600;">${name}</h3>`;
+      if (addrStreet) {
+        content += `<p style="margin: 0; font-size: 0.85rem; color: #666;">${addrStreet}</p>`;
       }
       if (props.height) {
-        content += `<p style="margin: 5px 0 0; font-size: 0.9em; color: #666;">Height: ${props.height}m</p>`;
+        content += `<p style="margin: 6px 0 0; font-size: 0.8rem; color: #888;">Height: ${escapeHtml(String(props.height))}m</p>`;
       }
-      content += `</div>`;
+      if (apartment) {
+        content += `<a href="/dashboard/apartments" style="display: inline-block; margin-top: 10px; font-size: 0.85rem; color: #2563eb; text-decoration: none;">View apartment →</a>`;
+      }
+      content += `</div></div>`;
       return content;
+    };
+
+    const findApartmentForBuilding = (buildingName: string): MapApartment | null => {
+      const list = apartmentsRef.current;
+      if (!list.length) return null;
+      const lower = buildingName?.toLowerCase() ?? "";
+      return (
+        list.find((a) => lower.includes(a.name.toLowerCase())) ??
+        list.find((a) => a.name.toLowerCase().includes(lower)) ??
+        null
+      );
     };
 
     const handleBuildingClick = (
@@ -338,9 +387,12 @@ export default function MapComponent() {
 
       handleBuildingClick(props, coords);
 
+      const buildingName = String(props.name || "");
+      const apartment = findApartmentForBuilding(buildingName);
+
       new maplibregl.Popup()
         .setLngLat(e.lngLat)
-        .setHTML(createPopupContent(props))
+        .setHTML(createPopupContent(props, apartment))
         .addTo(map.current!);
     });
 

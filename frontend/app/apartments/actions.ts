@@ -31,6 +31,7 @@ export async function addToFavorites(apartmentId: string) {
     }
 
     revalidatePath('/apartments')
+    revalidatePath('/dashboard/apartments')
 }
 
 export async function removeFromFavorites(apartmentId: string) {
@@ -59,4 +60,5 @@ export async function removeFromFavorites(apartmentId: string) {
     }
 
     revalidatePath('/apartments')
+    revalidatePath('/dashboard/apartments')
 }

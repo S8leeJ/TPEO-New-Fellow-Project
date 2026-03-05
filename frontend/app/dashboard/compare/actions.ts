@@ -207,6 +207,7 @@ export async function addToCompare(
 
   revalidatePath('/dashboard/compare')
   revalidatePath('/apartments')
+  revalidatePath('/dashboard/apartments')
   return { ok: true }
 }
 
@@ -232,4 +233,5 @@ export async function removeFromCompare(favoriteId: string) {
 
   revalidatePath('/dashboard/compare')
   revalidatePath('/apartments')
+  revalidatePath('/dashboard/apartments')
 }

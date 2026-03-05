@@ -1,0 +1,84 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
+import { getCompareItems } from "@/app/dashboard/compare/actions";
+import ApartmentCard from "@/app/apartments/ApartmentCard";
+
+function compareKey(apartmentId: string, unitId: string) {
+  return `${apartmentId}:${unitId}`;
+}
+
+export default async function DashboardApartmentsPage() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return redirect("/login");
+  }
+
+  const { data: apartments, error: apartmentsError } = await supabase
+    .from("apartments")
+    .select("id, name, image_url")
+    .order("name");
+
+  if (apartmentsError) {
+    console.error("Error fetching apartments:", apartmentsError);
+    return (
+      <div className="p-4 text-red-500">Error loading apartments</div>
+    );
+  }
+
+  const { data: favorites, error: favoritesError } = await supabase
+    .from("favorites")
+    .select("apartment_id")
+    .eq("user_id", user.id)
+    .is("unit_id", null);
+
+  if (favoritesError) {
+    console.error("Error fetching favorites:", favoritesError);
+  }
+
+  const starredIds = new Set(favorites?.map((f) => f.apartment_id) ?? []);
+
+  const compareItems = await getCompareItems();
+  const apartmentIdsInCompare = new Set(
+    compareItems.map((c) => c.apartment_id)
+  );
+  const compareKeys = compareItems.map((c) =>
+    compareKey(c.apartment_id, c.unit_id)
+  );
+
+  return (
+    <div className="-m-6 flex min-h-[calc(100vh-3.5rem-3rem)] flex-1 flex-col bg-zinc-50 p-6">
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+          Apartments
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          Browse buildings, star favorites, and add units to compare.
+        </p>
+      </header>
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        {apartments?.map((apartment) => (
+          <ApartmentCard
+            key={apartment.id}
+            apartment={apartment}
+            initialIsStarred={starredIds.has(apartment.id)}
+            isInCompare={apartmentIdsInCompare.has(apartment.id)}
+            compareKeys={compareKeys}
+          />
+        ))}
+      </div>
+      {apartments?.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white py-16 text-center">
+          <p className="text-zinc-500">No apartments found.</p>
+          <p className="mt-1 text-sm text-zinc-400">
+            Add apartments in the dashboard to see them here.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
