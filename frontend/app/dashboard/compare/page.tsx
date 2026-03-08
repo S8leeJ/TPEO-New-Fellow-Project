@@ -239,7 +239,7 @@ export default function ComparePage() {
                 <p className="text-lg font-medium ml-8 text-zinc-500">
                   Your comparing list is empty
                 </p>
-                <p className="mt-1 text-sm text-zinc-400">
+                <p className="mt-1 text-sm ml-8 text-zinc-400">
                   Click the + button to add units to compare
                 </p>
               </div>
