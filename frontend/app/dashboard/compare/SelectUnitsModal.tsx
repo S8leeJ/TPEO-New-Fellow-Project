@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { getUnitsByApartmentIds, type UnitWithApartment } from './actions'
 
@@ -14,6 +15,25 @@ interface SelectUnitsModalProps {
 
 function unitKey(apartmentId: string, unitId: string) {
   return `${apartmentId}:${unitId}`
+}
+
+function formatPrice(centsOrDollars: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(centsOrDollars)
+}
+
+function formatUnitInfo(unit: UnitWithApartment) {
+  const parts: string[] = []
+  if (unit.bedrooms != null) parts.push(`${unit.bedrooms} bed`)
+  if (unit.bathrooms != null) parts.push(`${unit.bathrooms} bath`)
+  if (unit.sq_ft != null) parts.push(`${unit.sq_ft} sqft`)
+  if (unit.floor != null) parts.push(`Floor ${unit.floor}`)
+  if (unit.windows != null) parts.push(unit.windows)
+  return parts.length > 0 ? parts.join(' · ') : (unit.layout_name ?? unit.room_type)
 }
 
 export default function SelectUnitsModal({
@@ -59,28 +79,11 @@ export default function SelectUnitsModal({
     }
   }
 
-  const formatUnitInfo = (unit: UnitWithApartment) => {
-    const parts: string[] = []
-    if (unit.bedrooms != null) parts.push(`${unit.bedrooms} bed`)
-    if (unit.bathrooms != null) parts.push(`${unit.bathrooms} bath`)
-    if (unit.sq_ft != null) parts.push(`${unit.sq_ft} sqft`)
-    if (unit.floor != null) parts.push(`Floor ${unit.floor}`)
-    if (unit.windows != null) parts.push(unit.windows)
-    return parts.length > 0 ? parts.join(' · ') : (unit.layout_name ?? unit.room_type)
-  }
-
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose()
   }
 
   if (!isOpen) return null
-
-  const unitsByApartment = units.reduce<Record<string, UnitWithApartment[]>>((acc, u) => {
-    const aid = u.apartment_id
-    if (!acc[aid]) acc[aid] = []
-    acc[aid].push(u)
-    return acc
-  }, {})
 
   return (
     <div
@@ -91,10 +94,10 @@ export default function SelectUnitsModal({
       aria-labelledby="select-units-title"
     >
       <div
-        className="w-full max-w-lg rounded-lg border border-zinc-200 bg-white shadow-xl"
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3">
           <h2 id="select-units-title" className="text-lg font-semibold text-zinc-900">
             Select a unit to add
           </h2>
@@ -110,68 +113,90 @@ export default function SelectUnitsModal({
           </button>
         </div>
 
-        <div className="max-h-96 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="flex justify-center py-8 text-zinc-500">Loading units…</div>
+            <div className="flex justify-center py-12 text-zinc-500">Loading units…</div>
           ) : error ? (
-            <div className="py-4 text-center text-sm text-red-600">{error}</div>
+            <div className="py-8 text-center text-sm text-red-600">{error}</div>
           ) : units.length === 0 ? (
-            <div className="py-8 text-center text-sm text-zinc-500">
+            <div className="py-12 text-center text-sm text-zinc-500">
               No units found for the selected apartments. Units may need to be added to the database.
             </div>
           ) : (
-            <div className="space-y-6">
-              {apartmentIds.map((aptId) => {
-                const aptUnits = unitsByApartment[aptId] ?? []
-                const aptName = apartmentNames.get(aptId) ?? 'Unknown'
-                if (aptUnits.length === 0) return null
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {units.map((unit) => {
+                const key = unitKey(unit.apartment_id, unit.id)
+                const isAlreadyAdded = existingCompareKeys.has(key)
+                const isAdding = addingId === unit.id
 
                 return (
-                  <div key={aptId}>
-                    <h3 className="mb-2 text-sm font-medium text-zinc-700">{aptName}</h3>
-                    <ul className="space-y-1">
-                      {aptUnits.map((unit) => {
-                        const key = unitKey(unit.apartment_id, unit.id)
-                        const isAlreadyAdded = existingCompareKeys.has(key)
-                        const isAdding = addingId === unit.id
-
-                        return (
-                          <li key={unit.id}>
-                            <button
-                              type="button"
-                              onClick={() => handleAddUnit(unit)}
-                              disabled={isAlreadyAdded || isAdding}
-                              className={`flex w-full flex-col items-start rounded-lg px-3 py-2.5 text-left transition-colors ${
-                                isAlreadyAdded
-                                  ? 'cursor-not-allowed bg-zinc-50 text-zinc-400'
-                                  : 'hover:bg-zinc-100'
-                              }`}
-                            >
-                              <span className="text-sm font-medium text-zinc-900">
-                                {unit.layout_name ?? unit.room_type}
-                              </span>
-                              <span className="text-xs text-zinc-500">
-                                {formatUnitInfo(unit)}
-                              </span>
-                              {isAlreadyAdded && (
-                                <span className="mt-1 text-xs text-zinc-400">Already in compare</span>
-                              )}
-                              {isAdding && (
-                                <span className="mt-1 text-xs text-zinc-500">Adding…</span>
-                              )}
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
+                  <button
+                    key={unit.id}
+                    type="button"
+                    onClick={() => handleAddUnit(unit)}
+                    disabled={isAlreadyAdded || isAdding}
+                    className={`relative flex flex-col overflow-hidden rounded-lg border-2 text-left transition-colors ${
+                      isAlreadyAdded
+                        ? 'cursor-not-allowed border-zinc-200 bg-zinc-50 opacity-60'
+                        : isAdding
+                          ? 'cursor-wait border-zinc-400 bg-zinc-50'
+                          : 'cursor-pointer border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'
+                    }`}
+                  >
+                    <div className="aspect-[4/3] w-full shrink-0 overflow-hidden bg-zinc-200">
+                      {unit.image_url ? (
+                        <Image
+                          src={unit.image_url}
+                          alt={unit.layout_name ?? unit.room_type ?? 'Unit'}
+                          width={280}
+                          height={210}
+                          className="h-full w-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-zinc-200">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-10 w-10 text-zinc-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1 p-3">
+                      <p className="font-semibold text-zinc-900">
+                        {unit.layout_name ?? unit.room_type}
+                      </p>
+                      <p className="text-sm font-semibold text-zinc-700">
+                        {unit.monthly_rent != null
+                          ? formatPrice(unit.monthly_rent)
+                          : '—'}
+                      </p>
+                      <p className="text-xs text-zinc-500">{formatUnitInfo(unit)}</p>
+                      {isAlreadyAdded && (
+                        <p className="mt-1 text-xs font-medium text-zinc-400">Already in compare</p>
+                      )}
+                      {isAdding && (
+                        <p className="mt-1 text-xs font-medium text-zinc-500">Adding…</p>
+                      )}
+                    </div>
+                  </button>
                 )
               })}
             </div>
           )}
         </div>
 
-        <div className="border-t border-zinc-200 px-4 py-3">
+        <div className="shrink-0 border-t border-zinc-200 px-4 py-3">
           <p className="text-center text-xs text-zinc-500">
             Click a unit to add it to the compare page
           </p>

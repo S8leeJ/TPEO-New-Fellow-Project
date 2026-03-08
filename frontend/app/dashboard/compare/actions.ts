@@ -22,7 +22,7 @@ export async function getApartments(): Promise<ApartmentForCompare[]> {
 
   const { data, error } = await supabase
     .from('apartments')
-    .select('id, name, image_url')
+    .select('id, name, image_url, address')
     .order('name')
 
   if (error) {
@@ -34,6 +34,7 @@ export async function getApartments(): Promise<ApartmentForCompare[]> {
     id: r.id,
     name: r.name,
     image_url: r.image_url ?? null,
+    address: r.address ?? null,
   }))
 }
 
@@ -48,6 +49,7 @@ export type UnitWithApartment = {
   floor: number | null
   windows: string | null
   image_url: string | null
+  monthly_rent: number | null
   apartment: { id: string; name: string }
 }
 
@@ -77,21 +79,39 @@ export async function getUnitsByApartmentIds(
   }
 
   const aptIds = [...new Set((units ?? []).map((u) => u.apartment_id))]
+  const unitIds = (units ?? []).map((u) => u.id)
   if (aptIds.length === 0) return []
 
-  const { data: apartments, error: aptError } = await supabase
-    .from('apartments')
-    .select('id, name')
-    .in('id', aptIds)
+  const [
+    { data: apartments, error: aptError },
+    { data: prices, error: pricesError },
+  ] = await Promise.all([
+    supabase.from('apartments').select('id, name').in('id', aptIds),
+    unitIds.length > 0
+      ? supabase.from('prices').select('unit_id, monthly_rent').in('unit_id', unitIds)
+      : { data: [], error: null },
+  ])
 
   if (aptError) {
     console.error('Error fetching apartments:', aptError)
     return []
   }
+  if (pricesError) {
+    console.error('Error fetching prices:', pricesError)
+  }
 
   const aptMap = new Map((apartments ?? []).map((a) => [a.id, a]))
+  const priceMap = new Map<string, number>()
+  for (const p of prices ?? []) {
+    const rent = (p as { unit_id?: string; monthly_rent?: number }).monthly_rent
+    if (p.unit_id && rent != null && !priceMap.has(p.unit_id)) {
+      priceMap.set(p.unit_id, Number(rent))
+    }
+  }
+
   return (units ?? []).map((u) => ({
     ...u,
+    monthly_rent: priceMap.get(u.id) ?? null,
     apartment: aptMap.get(u.apartment_id) ?? { id: u.apartment_id, name: 'Unknown' },
   }))
 }

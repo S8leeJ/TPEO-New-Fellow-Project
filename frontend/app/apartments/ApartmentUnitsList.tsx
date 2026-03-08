@@ -107,7 +107,7 @@ export default function ApartmentUnitsList({
       </div>
     )
   }
-
+  
   if (units.length === 0) {
     return (
       <div className="border-t border-zinc-200 bg-zinc-50/80 px-4 py-8 text-center">

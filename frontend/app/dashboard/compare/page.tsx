@@ -340,7 +340,7 @@ export default function ComparePage() {
             <div className={`${CARD_WIDTH} shrink-0`}>
               <div className="h-11 border-b border-zinc-200 py-2.5">
                 <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                  Feature
+                  Apartment
                 </span>
               </div>
               {visibleFeatures.map((f) => (
