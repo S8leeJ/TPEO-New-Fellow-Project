@@ -3,7 +3,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { getUnitsByApartmentIds, addToCompare, type UnitWithApartment } from '@/app/(dashboard)/compare/actions'
+import { type UnitWithApartment } from '@/app/(dashboard)/compare/actions'
+import { getUnitsByApartmentIds, addToCompare } from '@/lib/cached-actions'
 import { useRouter } from 'next/navigation'
 
 function unitKey(apartmentId: string, unitId: string) {

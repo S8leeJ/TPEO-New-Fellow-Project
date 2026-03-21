@@ -1,9 +1,11 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
-import { getApartments } from './actions'
+import { useEffect, useMemo, useState } from 'react'
 import type { ApartmentForCompare } from './actions'
+import { getApartments, getFavoriteApartmentIds } from '@/lib/cached-actions'
+
+type Tab = 'all' | 'favorites'
 
 interface AddApartmentsModalProps {
   isOpen: boolean
@@ -23,14 +25,22 @@ export default function AddApartmentsModal({
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>('all')
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
 
-  const filteredApartments = apartments.filter((apt) => {
+  const filteredApartments = useMemo(() => {
+    let list = apartments
+    if (activeTab === 'favorites') {
+      list = list.filter((apt) => favoriteIds.has(apt.id))
+    }
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return true
-    const name = apt.name.toLowerCase()
-    const address = (apt.address ?? '').toLowerCase()
-    return name.includes(q) || address.includes(q)
-  })
+    if (!q) return list
+    return list.filter((apt) => {
+      const name = apt.name.toLowerCase()
+      const address = (apt.address ?? '').toLowerCase()
+      return name.includes(q) || address.includes(q)
+    })
+  }, [apartments, searchQuery, activeTab, favoriteIds])
 
   useEffect(() => {
     if (isOpen) {
@@ -39,8 +49,12 @@ export default function AddApartmentsModal({
       setError(null)
       setSelectedIds(new Set())
       setSearchQuery('')
-      getApartments()
-        .then(setApartments)
+      setActiveTab('all')
+      Promise.all([getApartments(), getFavoriteApartmentIds()])
+        .then(([apts, favIds]) => {
+          setApartments(apts)
+          setFavoriteIds(favIds)
+        })
         .catch(() => setError('Failed to load apartments'))
         .finally(() => setLoading(false))
     }
@@ -104,15 +118,39 @@ export default function AddApartmentsModal({
           </button>
         </div>
 
-        <div className="flex shrink-0 border-b border-zinc-200 px-4 py-3">
+        <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-3">
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by building name or address…"
-            className="w-full rounded-lg border border-zinc-600 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="min-w-0 flex-1 rounded-lg border border-zinc-600 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             aria-label="Search apartment buildings"
           />
+          <div className="flex shrink-0 rounded-lg border border-zinc-200 p-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === 'all'
+                  ? 'bg-primary-900 text-white'
+                  : 'text-zinc-600 hover:bg-zinc-100'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('favorites')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                activeTab === 'favorites'
+                  ? 'bg-primary-900 text-white'
+                  : 'text-zinc-600 hover:bg-zinc-100'
+              }`}
+            >
+              Favorites{favoriteIds.size > 0 ? ` (${favoriteIds.size})` : ''}
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
@@ -122,7 +160,11 @@ export default function AddApartmentsModal({
             <div className="py-8 text-center text-sm text-red-600">{error}</div>
           ) : filteredApartments.length === 0 ? (
             <div className="py-12 text-center text-sm text-zinc-500">
-              {apartments.length === 0 ? 'No apartments found.' : 'No matching apartments.'}
+              {apartments.length === 0
+                ? 'No apartments found.'
+                : activeTab === 'favorites' && favoriteIds.size === 0
+                  ? 'No favorite apartments yet. Star apartments on the Apartments page to see them here.'
+                  : 'No matching apartments.'}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">

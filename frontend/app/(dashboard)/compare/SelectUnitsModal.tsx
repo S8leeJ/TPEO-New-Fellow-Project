@@ -2,7 +2,8 @@
 
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import { getUnitsByApartmentIds, type UnitWithApartment } from './actions'
+import type { UnitWithApartment } from './actions'
+import { getUnitsByApartmentIds } from '@/lib/cached-actions'
 
 interface SelectUnitsModalProps {
   isOpen: boolean

@@ -2,12 +2,12 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { type CompareItemWithDetails } from "./actions";
 import {
   addToCompare,
   getCompareItems,
   removeFromCompare,
-  type CompareItemWithDetails,
-} from "./actions";
+} from "@/lib/cached-actions";
 import AddApartmentsModal from "./AddApartmentsModal";
 import SelectUnitsModal from "./SelectUnitsModal";
 

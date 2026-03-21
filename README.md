@@ -76,4 +76,4 @@ Open [http://localhost:3000](http://localhost:3000).
 - **apartments** – Buildings (name, address, website, image_url, rating, reviews)
 - **units** – Individual units (bedrooms, bathrooms, sq_ft, floor, windows, etc.)
 - **prices** – Unit prices (monthly_rent)
-- **favorites** – User’s compare list (user_id, apartment_id, unit_id)
+- **compare** – User’s compare list (user_id, apartment_id, unit_id)

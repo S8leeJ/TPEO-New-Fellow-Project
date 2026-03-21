@@ -7,8 +7,11 @@ import { revalidatePath } from 'next/cache'
 export type ApartmentForCompare = {
   id: string
   name: string
-  image_url: string | null
+  image_url?: string | null
   address?: string | null
+  website?: string | null
+  rating?: number | null
+  reviews?: number | null
 }
 
 export async function getApartments(): Promise<ApartmentForCompare[]> {
@@ -22,7 +25,7 @@ export async function getApartments(): Promise<ApartmentForCompare[]> {
 
   const { data, error } = await supabase
     .from('apartments')
-    .select('id, name, image_url, address')
+    .select('id, name, image_url, address, website, rating, reviews')
     .order('name')
 
   if (error) {
@@ -35,6 +38,9 @@ export async function getApartments(): Promise<ApartmentForCompare[]> {
     name: r.name,
     image_url: r.image_url ?? null,
     address: r.address ?? null,
+    website: r.website ?? null,
+    rating: r.rating ?? null,
+    reviews: r.reviews ?? null,
   }))
 }
 
@@ -145,7 +151,7 @@ export async function getCompareItems(): Promise<CompareItemWithDetails[]> {
   }
 
   const { data: items, error: itemsError } = await supabase
-    .from('favorites')
+    .from('compare')
     .select('id, apartment_id, unit_id')
     .eq('user_id', user.id)
     .not('unit_id', 'is', null)
@@ -211,7 +217,7 @@ export async function addToCompare(
     redirect('/login')
   }
 
-  const { error } = await supabase.from('favorites').insert({
+  const { error } = await supabase.from('compare').insert({
     user_id: user.id,
     apartment_id: apartmentId,
     unit_id: unitId,
@@ -221,7 +227,7 @@ export async function addToCompare(
     console.error('Error adding to compare:', error)
     return {
       ok: false,
-      error: error.message ?? 'Failed to add unit. Ensure the unit_id migration is applied to favorites.',
+      error: error.message ?? 'Failed to add unit. Ensure the unit_id migration is applied to compare.',
     }
   }
 
@@ -240,7 +246,7 @@ export async function removeFromCompare(favoriteId: string) {
   }
 
   const { error } = await supabase
-    .from('favorites')
+    .from('compare')
     .delete()
     .eq('id', favoriteId)
     .eq('user_id', user.id)
