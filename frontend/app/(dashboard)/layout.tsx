@@ -1,8 +1,10 @@
+import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "../login/actions";
 import AddUnitWithNotif from "./AddUnitWithNotif";
 import NavLinks from "./NavLinks";
 import SignOutButton from "./SignOutButton";
+import logo from "./logo.png";
 
 export default function DashboardLayout({
   children,
@@ -12,13 +14,20 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <nav className="overflow-visible border-b border-primary-200 bg-primary-300">
-        <div className="mx-auto flex h-18 max-w-9xl items-center justify-between gap-6 overflow-visible px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-8">
+        <div className="mx-auto flex min-h-14 max-w-9xl items-center justify-between gap-6 overflow-visible px-4 py-2 sm:min-h-16 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-1 sm:gap-2">
             <Link
               href="/apartments"
-              className="text-3xl font-light tracking-tight text-primary-700"
+              className="relative flex h-10 w-[140px] shrink-0 items-center sm:h-11 sm:w-[160px] lg:h-12 lg:w-[180px] -mr-6 sm:-mr-8 lg:-mr-10"
             >
-              WAMP+
+              <Image
+                src={logo}
+                alt="WAMP+"
+                fill
+                className="object-contain object-left"
+                sizes="(max-width: 640px) 140px, (max-width: 1024px) 160px, 180px"
+                priority
+              />
             </Link>
             <NavLinks />
           </div>

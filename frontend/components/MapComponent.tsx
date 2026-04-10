@@ -1,6 +1,13 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type ChangeEvent,
+} from "react";
 import Image from "next/image";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -10,6 +17,11 @@ import {
   HEIGHT_OVERRIDES,
   MAP_BOUNDS,
 } from "@/lib/map-data";
+import {
+  extractScheduleLocationPicks,
+  type ScheduleLocationPick,
+} from "@/lib/schedule-json";
+import { lngLatForBuildingCode } from "@/lib/ut-building-code-resolve";
 import ApartmentDetailModal from "@/app/apartments/ApartmentDetailModal";
 import { getCompareItems } from "@/lib/cached-actions";
 import type { CompareItemWithDetails } from "@/app/(dashboard)/compare/actions";
@@ -62,6 +74,12 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function schedulePickMenuLabel(p: ScheduleLocationPick): string {
+  const room = p.room ? ` ${p.room}` : "";
+  const d = p.daysLabel ? ` · ${p.daysLabel}` : "";
+  return `${p.buildingCode}${room}${d} — ${p.courseLabel}`;
+}
+
 export default function MapComponent({
   apartments = [],
   initialFlyTo,
@@ -108,6 +126,14 @@ export default function MapComponent({
   const [routeFetching, setRouteFetching] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const routeOverlayRef = useRef<L.Layer | null>(null);
+  const scheduleFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [routeInputTab, setRouteInputTab] = useState<"search" | "schedule">("search");
+  const [schedulePicks, setSchedulePicks] = useState<ScheduleLocationPick[]>([]);
+  const [schedulePlanTitle, setSchedulePlanTitle] = useState<string | null>(null);
+  const [scheduleSelectKey, setScheduleSelectKey] = useState("");
+  const [scheduleTargetBuilding, setScheduleTargetBuilding] = useState("");
+  const [scheduleJsonError, setScheduleJsonError] = useState<string | null>(null);
 
   apartmentsRef.current = apartments;
 
@@ -144,6 +170,14 @@ export default function MapComponent({
       .slice(0, 12);
   }, [routeToSearch, searchableBuildings]);
 
+  const sortedMapBuildingNames = useMemo(
+    () =>
+      [...searchableBuildings.map((b) => b.name)].sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [searchableBuildings]
+  );
+
   const getLngLatForBuilding = useCallback((name: string): { lng: number; lat: number } | null => {
     const key = name.trim().toLowerCase();
     const feature = allBuildingsFeaturesRef.current.find(
@@ -179,6 +213,59 @@ export default function MapComponent({
       return hit ? hit.name : null;
     },
     [searchableBuildings]
+  );
+
+  const drawFootRoute = useCallback(
+    async (
+      from: { lng: number; lat: number },
+      to: { lng: number; lat: number },
+      fromLabel: string,
+      toLabel: string
+    ) => {
+      const m = map.current;
+      if (!m) throw new Error("Map not ready.");
+
+      const url = `https://router.project-osrm.org/route/v1/foot/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Routing service unavailable. Try again later.");
+      const data = (await res.json()) as {
+        code?: string;
+        message?: string;
+        routes?: Array<{
+          distance: number;
+          duration: number;
+          geometry: GeoJSON.LineString | GeoJSON.MultiLineString;
+        }>;
+      };
+      if (data.code !== "Ok" || !data.routes?.[0]?.geometry) {
+        throw new Error(
+          data.message || "No walking route found. Try buildings closer together on streets."
+        );
+      }
+      const r = data.routes[0];
+      const layer = L.geoJSON(r.geometry as GeoJSON.GeoJsonObject, {
+        style: {
+          color: "#5C6596",
+          weight: 5,
+          opacity: 0.9,
+          lineCap: "round",
+          lineJoin: "round",
+        },
+      });
+      layer.addTo(m);
+      routeOverlayRef.current = layer;
+      const b = layer.getBounds();
+      if (b.isValid()) {
+        m.fitBounds(b, { padding: [80, 80], maxZoom: 17, animate: true });
+      }
+      setRouteSummary({
+        distanceM: r.distance,
+        durationS: r.duration * WALK_DURATION_DISPLAY_MULTIPLIER,
+        fromLabel,
+        toLabel,
+      });
+    },
+    []
   );
 
   const requestWalkingRoute = useCallback(async () => {
@@ -235,47 +322,7 @@ export default function MapComponent({
         setRouteError("Invalid destination.");
         return;
       }
-      const toLabel = destName;
-
-      const url = `https://router.project-osrm.org/route/v1/foot/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Routing service unavailable. Try again later.");
-      const data = (await res.json()) as {
-        code?: string;
-        message?: string;
-        routes?: Array<{
-          distance: number;
-          duration: number;
-          geometry: GeoJSON.LineString | GeoJSON.MultiLineString;
-        }>;
-      };
-      if (data.code !== "Ok" || !data.routes?.[0]?.geometry) {
-        throw new Error(
-          data.message || "No walking route found. Try buildings closer together on streets."
-        );
-      }
-      const r = data.routes[0];
-      const layer = L.geoJSON(r.geometry as GeoJSON.GeoJsonObject, {
-        style: {
-          color: "#5C6596",
-          weight: 5,
-          opacity: 0.9,
-          lineCap: "round",
-          lineJoin: "round",
-        },
-      });
-      layer.addTo(map.current);
-      routeOverlayRef.current = layer;
-      const b = layer.getBounds();
-      if (b.isValid()) {
-        map.current.fitBounds(b, { padding: [80, 80], maxZoom: 17, animate: true });
-      }
-      setRouteSummary({
-        distanceM: r.distance,
-        durationS: r.duration * WALK_DURATION_DISPLAY_MULTIPLIER,
-        fromLabel,
-        toLabel,
-      });
+      await drawFootRoute(from, to, fromLabel, destName);
     } catch (e) {
       setRouteError(e instanceof Error ? e.message : "Could not load route.");
     } finally {
@@ -283,6 +330,7 @@ export default function MapComponent({
     }
   }, [
     clearWalkingRoute,
+    drawFootRoute,
     getLngLatForBuilding,
     resolveRouteEndpoint,
     routeFromName,
@@ -290,6 +338,107 @@ export default function MapComponent({
     routeToName,
     routeToSearch,
     useMyLocationStart,
+  ]);
+
+  const handleScheduleFile = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      setScheduleJsonError(null);
+      setShowWalkingDirections(true);
+      setRouteInputTab("schedule");
+      try {
+        const text = await file.text();
+        const data: unknown = JSON.parse(text);
+        const picks = extractScheduleLocationPicks(data);
+        if (picks.length === 0) {
+          setScheduleJsonError(
+            "No meetings with a building code were found in this file."
+          );
+          setSchedulePicks([]);
+          setScheduleSelectKey("");
+          setSchedulePlanTitle(null);
+          return;
+        }
+        setSchedulePicks(picks);
+        setScheduleSelectKey(picks[0]!.key);
+        const root = data as { name?: string };
+        setSchedulePlanTitle(
+          typeof root.name === "string" && root.name.trim()
+            ? root.name.trim()
+            : file.name.replace(/\.json$/i, "")
+        );
+      } catch (err) {
+        setScheduleJsonError(
+          err instanceof Error ? err.message : "Could not read schedule JSON."
+        );
+        setSchedulePicks([]);
+        setScheduleSelectKey("");
+        setSchedulePlanTitle(null);
+      }
+    },
+    []
+  );
+
+  const openScheduleFilePicker = useCallback(() => {
+    setShowWalkingDirections(true);
+    setRouteInputTab("schedule");
+    queueMicrotask(() => scheduleFileInputRef.current?.click());
+  }, []);
+
+  const requestScheduleWalkingRoute = useCallback(async () => {
+    if (!map.current) return;
+    setRouteError(null);
+    clearWalkingRoute();
+    setRouteFetching(true);
+    try {
+      const pick = schedulePicks.find((p) => p.key === scheduleSelectKey);
+      if (!pick) {
+        setRouteError("Upload a schedule and choose a class location.");
+        return;
+      }
+      const resolved = lngLatForBuildingCode(
+        pick.buildingCode,
+        allBuildingsFeaturesRef.current
+      );
+      if (!resolved) {
+        setRouteError(
+          `Could not map “${pick.buildingCode}” to a building on the map. Wait for the map to finish loading, or add this abbreviation in ut-building-code-resolve.ts.`
+        );
+        return;
+      }
+      const destName = scheduleTargetBuilding.trim();
+      if (!destName) {
+        setRouteError("Choose a destination building.");
+        return;
+      }
+      const to = getLngLatForBuilding(destName);
+      if (!to) {
+        setRouteError("That destination is not on the map.");
+        return;
+      }
+      const roomPart = pick.room ? `${pick.room} · ` : "";
+      const daysPart = pick.daysLabel ? `${pick.daysLabel} · ` : "";
+      const fromLabel = `${pick.buildingCode} · ${roomPart}${daysPart}${pick.courseLabel} → ${resolved.matchedName}`;
+      await drawFootRoute(
+        { lng: resolved.lng, lat: resolved.lat },
+        to,
+        fromLabel,
+        destName
+      );
+    } catch (e) {
+      setRouteError(e instanceof Error ? e.message : "Could not load route.");
+    } finally {
+      setRouteFetching(false);
+    }
+  }, [
+    clearWalkingRoute,
+    drawFootRoute,
+    getLngLatForBuilding,
+    schedulePicks,
+    scheduleSelectKey,
+    scheduleTargetBuilding,
   ]);
 
   const flyToTargetByName = useCallback((name: string) => {
@@ -826,165 +975,311 @@ export default function MapComponent({
           </div>
 
           <div className="w-full overflow-visible rounded-xl border border-zinc-200 bg-white/95 shadow-md backdrop-blur">
-            <button
-              type="button"
-              onClick={() => setShowWalkingDirections((v) => !v)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50/80 sm:px-5"
-              aria-expanded={showWalkingDirections}
-            >
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-800"
-                  aria-hidden
-                >
-                  <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75L15.75 12 9 17.25" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12H3.75" />
+            <input
+              ref={scheduleFileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
+              onChange={handleScheduleFile}
+            />
+            <div className="flex w-full items-stretch">
+              <button
+                type="button"
+                onClick={() => setShowWalkingDirections((v) => !v)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-zinc-50/80 sm:gap-3 sm:px-5"
+                aria-expanded={showWalkingDirections}
+              >
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-800"
+                    aria-hidden
+                  >
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75L15.75 12 9 17.25" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12H3.75" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold uppercase tracking-wide text-primary-800">
+                      Walking directions
+                    </span>
+                    {!showWalkingDirections && (
+                      <span className="mt-0.5 block text-[11px] font-normal normal-case text-zinc-500">
+                        Plan a route or upload your class schedule
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-zinc-600">
+                  {showWalkingDirections ? "Hide" : "Show"}
+                  <svg
+                    className={`h-5 w-5 text-zinc-500 transition-transform ${showWalkingDirections ? "rotate-180" : ""}`}
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                   </svg>
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-xs font-semibold uppercase tracking-wide text-primary-800">
-                    Walking directions
-                  </span>
-                  {!showWalkingDirections && (
-                    <span className="mt-0.5 block text-[11px] font-normal normal-case text-zinc-500">
-                      Plan a walking route on campus
-                    </span>
-                  )}
-                </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-zinc-600">
-                {showWalkingDirections ? "Hide" : "Show"}
-                <svg
-                  className={`h-5 w-5 text-zinc-500 transition-transform ${showWalkingDirections ? "rotate-180" : ""}`}
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  aria-hidden
+              </button>
+              <div className="flex shrink-0 flex-col justify-center border-l border-zinc-200 bg-zinc-50/60 px-2 py-2 sm:px-3">
+                <button
+                  type="button"
+                  onClick={openScheduleFilePicker}
+                  aria-label="Upload class schedule JSON file"
+                  className="whitespace-nowrap rounded-lg bg-primary-700 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm hover:bg-primary-600 sm:text-sm"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-              </span>
-            </button>
+                  Upload schedule
+                </button>
+              </div>
+            </div>
 
           {showWalkingDirections && (
           <div className="border-t border-zinc-100 px-4 pb-4 pt-3 sm:px-5">
             <p className="text-[11px] leading-snug text-zinc-500">
               Routes use OpenStreetMap walking paths (OSRM). Allow location if you start from “my location.” Times are a relaxed campus estimate (slower than raw OSRM).
             </p>
-            <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
-              <input
-                type="checkbox"
-                checked={useMyLocationStart}
-                onChange={(e) => {
-                  setUseMyLocationStart(e.target.checked);
-                  if (e.target.checked) {
-                    setRouteFromName(null);
-                    setRouteFromSearch("");
-                  }
-                }}
-                className="rounded border-zinc-300 text-primary-700 focus:ring-primary-500"
-              />
-              Start from my current location
-            </label>
 
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="relative">
-                <label htmlFor="route-from" className="mb-1 block text-xs font-medium text-zinc-600">
-                  From
-                </label>
-                <input
-                  id="route-from"
-                  type="search"
-                  disabled={useMyLocationStart}
-                  value={routeFromSearch}
-                  onChange={(e) => {
-                    setRouteFromDropdownDismissed(false);
-                    setRouteFromSearch(e.target.value);
-                    setRouteFromName(null);
-                  }}
-                  onFocus={() => setRouteFromDropdownDismissed(false)}
-                  placeholder={useMyLocationStart ? "Using GPS…" : "Search start building…"}
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-zinc-100 disabled:text-zinc-500"
-                  autoComplete="off"
-                />
-                {!useMyLocationStart &&
-                  routeFromSearch.trim() &&
-                  routeFromResults.length > 0 &&
-                  !routeFromDropdownDismissed && (
-                  <ul className="absolute left-0 right-0 top-full z-[1200] mt-0.5 max-h-[min(22rem,50vh)] overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
-                    {routeFromResults.map((b) => (
-                      <li key={`from-${b.name}`}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-zinc-800 hover:bg-primary-50"
-                          onClick={() => {
-                            setRouteFromDropdownDismissed(true);
-                            setRouteFromName(b.name);
-                            setRouteFromSearch(b.name);
-                          }}
-                        >
-                          <span className="min-w-0 truncate">{b.name}</span>
-                          <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-500">
-                            {b.isApartment ? "Apt" : "Campus"}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="relative">
-                <label htmlFor="route-to" className="mb-1 block text-xs font-medium text-zinc-600">
-                  To
-                </label>
-                <input
-                  id="route-to"
-                  type="search"
-                  value={routeToSearch}
-                  onChange={(e) => {
-                    setRouteToDropdownDismissed(false);
-                    setRouteToSearch(e.target.value);
-                    setRouteToName(null);
-                  }}
-                  onFocus={() => setRouteToDropdownDismissed(false)}
-                  placeholder="Search destination building…"
-                  className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  autoComplete="off"
-                />
-                {routeToSearch.trim() &&
-                  routeToResults.length > 0 &&
-                  !routeToDropdownDismissed && (
-                  <ul className="absolute left-0 right-0 top-full z-[1200] mt-0.5 max-h-[min(22rem,50vh)] overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
-                    {routeToResults.map((b) => (
-                      <li key={`to-${b.name}`}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-zinc-800 hover:bg-primary-50"
-                          onClick={() => {
-                            setRouteToDropdownDismissed(true);
-                            setRouteToName(b.name);
-                            setRouteToSearch(b.name);
-                          }}
-                        >
-                          <span className="min-w-0 truncate">{b.name}</span>
-                          <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-500">
-                            {b.isApartment ? "Apt" : "Campus"}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            <button
+              type="button"
+              onClick={openScheduleFilePicker}
+              aria-label="Upload class schedule as JSON"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary-300 bg-primary-50/60 px-4 py-3 text-sm font-semibold text-primary-900 transition-colors hover:border-primary-400 hover:bg-primary-50"
+            >
+              <svg className="h-5 w-5 shrink-0 text-primary-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              Upload class schedule (JSON)
+            </button>
+            {schedulePlanTitle && (
+              <p className="mt-2 text-center text-xs text-zinc-600">
+                Loaded: <span className="font-medium text-zinc-800">{schedulePlanTitle}</span>
+              </p>
+            )}
+            {scheduleJsonError && (
+              <p className="mt-2 text-center text-xs font-medium text-red-700">{scheduleJsonError}</p>
+            )}
+
+            <div
+              className="mt-3 flex gap-1 rounded-lg bg-zinc-100/90 p-1"
+              role="tablist"
+              aria-label="Route start mode"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={routeInputTab === "search"}
+                onClick={() => setRouteInputTab("search")}
+                className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+                  routeInputTab === "search"
+                    ? "bg-white text-primary-900 shadow-sm"
+                    : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              >
+                Search map
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={routeInputTab === "schedule"}
+                onClick={() => setRouteInputTab("schedule")}
+                className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+                  routeInputTab === "schedule"
+                    ? "bg-white text-primary-900 shadow-sm"
+                    : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              >
+                From schedule (JSON)
+              </button>
             </div>
+
+            {routeInputTab === "search" && (
+              <>
+                <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={useMyLocationStart}
+                    onChange={(e) => {
+                      setUseMyLocationStart(e.target.checked);
+                      if (e.target.checked) {
+                        setRouteFromName(null);
+                        setRouteFromSearch("");
+                      }
+                    }}
+                    className="rounded border-zinc-300 text-primary-700 focus:ring-primary-500"
+                  />
+                  Start from my current location
+                </label>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="relative">
+                    <label htmlFor="route-from" className="mb-1 block text-xs font-medium text-zinc-600">
+                      From
+                    </label>
+                    <input
+                      id="route-from"
+                      type="search"
+                      disabled={useMyLocationStart}
+                      value={routeFromSearch}
+                      onChange={(e) => {
+                        setRouteFromDropdownDismissed(false);
+                        setRouteFromSearch(e.target.value);
+                        setRouteFromName(null);
+                      }}
+                      onFocus={() => setRouteFromDropdownDismissed(false)}
+                      placeholder={useMyLocationStart ? "Using GPS…" : "Search start building…"}
+                      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-zinc-100 disabled:text-zinc-500"
+                      autoComplete="off"
+                    />
+                    {!useMyLocationStart &&
+                      routeFromSearch.trim() &&
+                      routeFromResults.length > 0 &&
+                      !routeFromDropdownDismissed && (
+                      <ul className="absolute left-0 right-0 top-full z-[1200] mt-0.5 max-h-[min(22rem,50vh)] overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                        {routeFromResults.map((b) => (
+                          <li key={`from-${b.name}`}>
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-zinc-800 hover:bg-primary-50"
+                              onClick={() => {
+                                setRouteFromDropdownDismissed(true);
+                                setRouteFromName(b.name);
+                                setRouteFromSearch(b.name);
+                              }}
+                            >
+                              <span className="min-w-0 truncate">{b.name}</span>
+                              <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-500">
+                                {b.isApartment ? "Apt" : "Campus"}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <label htmlFor="route-to" className="mb-1 block text-xs font-medium text-zinc-600">
+                      To
+                    </label>
+                    <input
+                      id="route-to"
+                      type="search"
+                      value={routeToSearch}
+                      onChange={(e) => {
+                        setRouteToDropdownDismissed(false);
+                        setRouteToSearch(e.target.value);
+                        setRouteToName(null);
+                      }}
+                      onFocus={() => setRouteToDropdownDismissed(false)}
+                      placeholder="Search destination building…"
+                      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      autoComplete="off"
+                    />
+                    {routeToSearch.trim() &&
+                      routeToResults.length > 0 &&
+                      !routeToDropdownDismissed && (
+                      <ul className="absolute left-0 right-0 top-full z-[1200] mt-0.5 max-h-[min(22rem,50vh)] overflow-auto rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                        {routeToResults.map((b) => (
+                          <li key={`to-${b.name}`}>
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-zinc-800 hover:bg-primary-50"
+                              onClick={() => {
+                                setRouteToDropdownDismissed(true);
+                                setRouteToName(b.name);
+                                setRouteToSearch(b.name);
+                              }}
+                            >
+                              <span className="min-w-0 truncate">{b.name}</span>
+                              <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-zinc-500">
+                                {b.isApartment ? "Apt" : "Campus"}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {routeInputTab === "schedule" && (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] leading-snug text-zinc-500">
+                    Export must include <code className="rounded bg-zinc-100 px-1">courses</code> and{" "}
+                    <code className="rounded bg-zinc-100 px-1">location.building</code> (e.g. GDC, UTC).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openScheduleFilePicker}
+                    className="shrink-0 text-xs font-semibold text-primary-700 underline decoration-primary-300 underline-offset-2 hover:text-primary-900"
+                  >
+                    Replace file
+                  </button>
+                </div>
+                <div>
+                  <label htmlFor="schedule-from-meeting" className="mb-1 block text-xs font-medium text-zinc-600">
+                    From class location
+                  </label>
+                  <select
+                    id="schedule-from-meeting"
+                    value={scheduleSelectKey}
+                    onChange={(e) => setScheduleSelectKey(e.target.value)}
+                    disabled={schedulePicks.length === 0}
+                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+                  >
+                    {schedulePicks.length === 0 ? (
+                      <option value="">Upload a JSON file first…</option>
+                    ) : (
+                      schedulePicks.map((p) => (
+                        <option key={p.key} value={p.key}>
+                          {schedulePickMenuLabel(p)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="schedule-to-building" className="mb-1 block text-xs font-medium text-zinc-600">
+                    To (building on map)
+                  </label>
+                  <select
+                    id="schedule-to-building"
+                    value={scheduleTargetBuilding}
+                    onChange={(e) => setScheduleTargetBuilding(e.target.value)}
+                    disabled={sortedMapBuildingNames.length === 0}
+                    className="w-full max-w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500"
+                  >
+                    <option value="">
+                      {sortedMapBuildingNames.length === 0
+                        ? "Loading map buildings…"
+                        : "Choose destination…"}
+                    </option>
+                    {sortedMapBuildingNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={requestWalkingRoute}
+                onClick={() =>
+                  routeInputTab === "schedule"
+                    ? requestScheduleWalkingRoute()
+                    : requestWalkingRoute()
+                }
                 disabled={routeFetching}
                 className="rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
