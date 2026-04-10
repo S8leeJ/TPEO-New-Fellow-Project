@@ -1,0 +1,6 @@
+ollama
+faster-whisper
+kokoro
+sounddevice 
+numpy 
+scipy
