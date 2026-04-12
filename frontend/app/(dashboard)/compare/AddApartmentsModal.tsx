@@ -62,15 +62,7 @@ export default function AddApartmentsModal({
 
   const toggleSelection = (id: string) => {
     if (existingFavoriteIds.has(id)) return
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
+    setSelectedIds(new Set([id]))
   }
 
   const handleSubmit = () => {
@@ -183,7 +175,8 @@ export default function AddApartmentsModal({
                     }`}
                   >
                     <input
-                      type="checkbox"
+                      type="radio"
+                      name="apartment-selection"
                       checked={isSelected || isAlreadyFavorite}
                       disabled={isAlreadyFavorite}
                       onChange={() => toggleSelection(apt.id)}
@@ -238,7 +231,7 @@ export default function AddApartmentsModal({
             disabled={selectedIds.size === 0}
             className="rounded-lg bg-primary-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Next: Select units ({selectedIds.size})
+            Next: Select units
           </button>
         </div>
       </div>

@@ -137,6 +137,56 @@ export default function MapComponent({
 
   apartmentsRef.current = apartments;
 
+  /** Apartment buildings with at least one unit on compare — primary-tinted highlight on the map. */
+  const compareApartmentIds = useMemo(
+    () =>
+      new Set(
+        compareKeys.map((k) => {
+          const i = k.indexOf(":");
+          return i >= 0 ? k.slice(0, i) : k;
+        })
+      ),
+    [compareKeys]
+  );
+
+  const getBuildingPolygonStyleRef = useRef<(feature: GeoJSON.Feature) => L.PathOptions>(
+    () => ({
+      fillColor: "#94a3b8",
+      fillOpacity: 0.1,
+      color: "#cbd5e1",
+      weight: 0.6,
+    })
+  );
+
+  function getBuildingPolygonStyle(feature: GeoJSON.Feature): L.PathOptions {
+    const isApartment = (feature.properties?.isApartment as boolean) ?? false;
+    if (!isApartment) {
+      return {
+        fillColor: "#94a3b8",
+        fillOpacity: 0.05,
+        color: "#cbd5e1",
+        weight: 0.6,
+      };
+    }
+    const buildingName = String(feature.properties?.name ?? "").trim();
+    const apt = findApartmentForBuilding(buildingName, apartmentsRef.current);
+    const inCompare = apt && compareApartmentIds.has(apt.id);
+    if (inCompare) {
+      return {
+        fillColor: "#4d5480",
+        fillOpacity: 0.7,
+        stroke: false,
+      };
+    }
+    return {
+      fillColor: "#5C6596",
+      fillOpacity: 0.3,
+      stroke: false,
+    };
+  }
+
+  getBuildingPolygonStyleRef.current = getBuildingPolygonStyle;
+
   const fetchCompareKeys = useCallback(async () => {
     const items: CompareItemWithDetails[] = await getCompareItems();
     setCompareKeys(items.map((c) => compareKey(c.apartment_id, c.unit_id)));
@@ -710,22 +760,15 @@ export default function MapComponent({
           features: validRoads,
         };
 
-        const buildingStyle = (feature?: GeoJSON.Feature) => {
-          const isApartment = (feature?.properties?.isApartment as boolean) ?? false;
-          if (isApartment) {
-            return {
-              fillColor: "#5C6596",
-              fillOpacity: 0.38,
-              stroke: false,
-            };
-          }
-          return {
-            fillColor: "#94a3b8",
-            fillOpacity: 0.1,
-            color: "#cbd5e1",
-            weight: 0.6,
-          };
-        };
+        const buildingStyle = (feature?: GeoJSON.Feature) =>
+          feature
+            ? getBuildingPolygonStyleRef.current(feature)
+            : {
+                fillColor: "#94a3b8",
+                fillOpacity: 0.1,
+                color: "#cbd5e1",
+                weight: 0.6,
+              };
 
         const roadStyle = () => ({
           color: "#94a3b8",
@@ -888,6 +931,15 @@ export default function MapComponent({
       roadsLayer.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const layer = buildingsLayer.current;
+    if (!layer) return;
+    layer.eachLayer((l) => {
+      const feat = (l as L.Layer & { feature?: GeoJSON.Feature }).feature;
+      if (feat) (l as L.Path).setStyle(getBuildingPolygonStyleRef.current(feat));
+    });
+  }, [compareApartmentIds, apartments]);
 
   const addrLine = (props: Record<string, unknown>) => {
     if (!props["addr:street"]) return null;
